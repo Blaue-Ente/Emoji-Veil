@@ -1,28 +1,42 @@
 const BASE64URL =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-export function generatePrivacyKey(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 function utf8Encode(text: string): Uint8Array {
   return new TextEncoder().encode(text);
 }
 
-function utf8Decode(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes);
+export function generateMessageId(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function xorEncrypt(plaintext: string, key: string): Uint8Array {
-  const data = utf8Encode(plaintext);
-  const keyBytes = utf8Encode(key);
+export async function deriveMessageKey(
+  vaultKey: string,
+  messageId: string,
+): Promise<string> {
+  const material = utf8Encode(`${vaultKey}:${messageId}:ee3`);
+  const hash = await crypto.subtle.digest("SHA-256", material as BufferSource);
+  return Array.from(new Uint8Array(hash), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
+function xorWithKeyBytes(data: Uint8Array, keyBytes: Uint8Array): Uint8Array {
   const out = new Uint8Array(data.length);
   for (let i = 0; i < data.length; i++) {
     out[i] = data[i] ^ keyBytes[i % keyBytes.length];
   }
   return out;
+}
+
+export function xorEncryptWithBytes(
+  plaintext: string,
+  keyHex: string,
+): Uint8Array {
+  const data = utf8Encode(plaintext);
+  const keyBytes = utf8Encode(keyHex);
+  return xorWithKeyBytes(data, keyBytes);
 }
 
 export function toBase64Url(bytes: Uint8Array): string {
@@ -46,8 +60,13 @@ export function toBase64Url(bytes: Uint8Array): string {
   return output;
 }
 
-export function encryptPayload(payload: unknown, privacyKey: string): string {
+export async function encryptPayload(
+  payload: unknown,
+  vaultKey: string,
+  messageId: string,
+): Promise<string> {
+  const messageKey = await deriveMessageKey(vaultKey, messageId);
   const json = JSON.stringify(payload);
-  const encrypted = xorEncrypt(json, privacyKey);
+  const encrypted = xorEncryptWithBytes(json, messageKey);
   return toBase64Url(encrypted);
 }
