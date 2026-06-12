@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { encode } from "@/lib/encoder";
-import { Check, Copy, Zap, Lock, Key, ChevronRight } from "lucide-react";
+import { Check, Copy, Zap, Lock, Key, ChevronRight, Shield } from "lucide-react";
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -48,17 +48,22 @@ function CopyButton({ text, label }: { text: string; label: string }) {
 
 const STEPS = [
   "Enter your command in any language",
-  "Click Generate",
-  "Copy the Decoder Prompt → paste into your LLM",
-  "Copy the Emoji Sequence → paste right after the prompt",
-  "Send to the LLM — it decodes only with both pieces",
+  "Click Generate — a one-time Privacy Key and encrypted codebook are created",
+  "Copy the Privacy Unlock Code → paste into your LLM first",
+  "Copy the Emoji Payload → paste as the next message",
+  "Only the LLM with the unlock code can decode — observers see opaque data",
 ];
 
 export default function EmojiEncrypt() {
   const [input, setInput] = useState("");
-  const [result, setResult] = useState<{ emojiSequence: string; decoderPrompt: string } | null>(null);
+  const [result, setResult] = useState<{
+    privacyKey: string;
+    emojiSequence: string;
+    unlockCode: string;
+    uniqueTokenCount: number;
+    poolSize: number;
+  } | null>(null);
   const [error, setError] = useState("");
-  const [wordCount, setWordCount] = useState(0);
 
   const handleGenerate = useCallback(() => {
     if (!input.trim()) {
@@ -68,8 +73,13 @@ export default function EmojiEncrypt() {
     }
     setError("");
     const encoded = encode(input);
-    setResult({ emojiSequence: encoded.emojiSequence, decoderPrompt: encoded.decoderPrompt });
-    setWordCount(encoded.mapping.size);
+    setResult({
+      privacyKey: encoded.privacyKey,
+      emojiSequence: encoded.emojiSequence,
+      unlockCode: encoded.unlockCode,
+      uniqueTokenCount: encoded.uniqueTokenCount,
+      poolSize: encoded.poolSize,
+    });
   }, [input]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -82,7 +92,6 @@ export default function EmojiEncrypt() {
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
       <div className="max-w-3xl mx-auto px-4 py-12 space-y-10">
 
-        {/* Header */}
         <header className="text-center space-y-3">
           <div className="flex items-center justify-center gap-3 mb-2">
             <div className="p-2.5 rounded-xl bg-violet-500/20 border border-violet-500/30">
@@ -92,12 +101,12 @@ export default function EmojiEncrypt() {
               Emoji Encrypt for LLM
             </h1>
           </div>
-          <p className="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
-            Encode natural language commands into emoji sequences. Only an LLM with the decoder prompt can read it.
+          <p className="text-slate-400 text-sm max-w-lg mx-auto leading-relaxed">
+            Encode commands into emoji payloads with an encrypted, machine-readable unlock code.
+            The mapping is never shown in plain text — only you and the LLM can recover the message.
           </p>
         </header>
 
-        {/* How it works */}
         <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-2">
             <Zap size={12} className="text-violet-400" />
@@ -115,7 +124,19 @@ export default function EmojiEncrypt() {
           </ol>
         </section>
 
-        {/* Input */}
+        <section className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-emerald-500 flex items-center gap-2">
+            <Shield size={12} />
+            Privacy model (EE-v2)
+          </h2>
+          <ul className="text-xs text-slate-400 space-y-1.5 leading-relaxed">
+            <li>• Word→emoji mapping is XOR-encrypted inside the unlock code — no readable dictionary</li>
+            <li>• {result ? `${result.poolSize.toLocaleString()}` : "2,000+"} unique emojis in the alphabet (vs. ~500 before)</li>
+            <li>• Overflow words use 2-emoji bigrams before falling back to letter indicators</li>
+            <li>• Casual observers see gibberish + emojis; the LLM follows the EE2 protocol to decode</li>
+          </ul>
+        </section>
+
         <section className="space-y-3">
           <label className="block text-sm font-medium text-slate-300">
             Your command
@@ -151,40 +172,46 @@ export default function EmojiEncrypt() {
           </div>
         </section>
 
-        {/* Output */}
         {result && (
           <section className="space-y-5">
             <div className="flex items-center gap-2 text-sm text-slate-400">
               <div className="h-px flex-1 bg-slate-800" />
               <span className="text-slate-500 text-xs px-2">
-                Mapped {wordCount} unique word{wordCount !== 1 ? "s" : ""}
+                {result.uniqueTokenCount} token{result.uniqueTokenCount !== 1 ? "s" : ""} · {result.poolSize.toLocaleString()} emoji alphabet
               </span>
               <div className="h-px flex-1 bg-slate-800" />
             </div>
 
-            {/* Decoder Prompt */}
             <OutputBlock
-              step="Step 3 — Paste this FIRST into your LLM"
-              title="LLM Decoder Prompt"
-              content={result.decoderPrompt}
-              copyLabel="Copy Prompt"
-              accentColor="violet"
-              hint="Paste this into the LLM chat window before the emoji sequence."
+              step="Session secret (embedded in unlock code)"
+              title="Privacy Key"
+              content={result.privacyKey}
+              copyLabel="Copy Key"
+              accentColor="emerald"
+              hint="One-time session key. Already included in the unlock code — save only if you need it separately."
             />
 
-            {/* Emoji Sequence */}
             <OutputBlock
-              step="Step 4 — Paste this AFTER the prompt"
-              title="Encrypted Emoji Sequence"
+              step="Step 3 — Paste this FIRST into your LLM"
+              title="Privacy Unlock Code"
+              content={result.unlockCode}
+              copyLabel="Copy Unlock Code"
+              accentColor="violet"
+              hint="Machine-readable EE2 protocol with encrypted codebook. Humans cannot read the word mapping from this blob."
+            />
+
+            <OutputBlock
+              step="Step 4 — Paste this as the NEXT message"
+              title="Emoji Payload"
               content={result.emojiSequence}
-              copyLabel="Copy Emojis"
+              copyLabel="Copy Payload"
               accentColor="cyan"
-              hint="Paste this immediately after the decoder prompt, then send."
+              hint="Looks like random emojis to observers. The LLM decodes it using the unlock code."
               large
             />
 
             <p className="text-center text-xs text-slate-600">
-              Each time you click Generate, a brand-new random mapping is created — the same words get different emojis every time.
+              Each Generate creates a fresh Privacy Key and random emoji assignment. Same text → different emojis every time.
             </p>
           </section>
         )}
@@ -198,16 +225,24 @@ interface OutputBlockProps {
   title: string;
   content: string;
   copyLabel: string;
-  accentColor: "violet" | "cyan";
+  accentColor: "violet" | "cyan" | "emerald";
   hint: string;
   large?: boolean;
 }
 
 function OutputBlock({ step, title, content, copyLabel, accentColor, hint, large }: OutputBlockProps) {
-  const accent = accentColor === "violet"
-    ? "border-violet-500/30 bg-violet-500/5"
-    : "border-cyan-500/30 bg-cyan-500/5";
-  const stepColor = accentColor === "violet" ? "text-violet-400" : "text-cyan-400";
+  const accent =
+    accentColor === "violet"
+      ? "border-violet-500/30 bg-violet-500/5"
+      : accentColor === "cyan"
+        ? "border-cyan-500/30 bg-cyan-500/5"
+        : "border-emerald-500/30 bg-emerald-500/5";
+  const stepColor =
+    accentColor === "violet"
+      ? "text-violet-400"
+      : accentColor === "cyan"
+        ? "text-cyan-400"
+        : "text-emerald-400";
 
   return (
     <div className={`rounded-xl border ${accent} p-5 space-y-3`}>
