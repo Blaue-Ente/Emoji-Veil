@@ -1,0 +1,1 @@
+- [Emoji Encrypt port setup](emoji-encrypt-port-setup.md) — artifact workflow port detection broken; use console-type "Emoji Encrypt Dev" workflow on port 5000 instead.

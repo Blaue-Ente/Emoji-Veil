@@ -1,0 +1,140 @@
+==BEGIN PROMPT==
+
+Project: Private Emoji Steganography App for LLM Communication
+
+1. Context & Goal
+
+I need a complete application that allows a user to encrypt a natural language command into a sequence of emojis (and optionally images) using a randomly generated one-time mapping. The encrypted emoji message is meant to be pasted into a chat with a Large Language Model (LLM) together with a specially crafted instruction prompt (the “decoder prompt”) that contains the mapping. Only the LLM that receives both the instruction prompt and the emoji sequence will be able to decode and understand the original message. Third parties seeing only the emojis will not be able to decipher it.
+
+Key points:
+
+· The user enters a command in natural language (any language, e.g., Bulgarian or English).
+· The app generates:
+  · A random word-to-emoji mapping (dictionary) for all unique words in the command.
+  · An encoded emoji sequence where each word is replaced by its mapped emoji (or by letter-indicator symbols if no emoji is assigned).
+  · A decoder instruction prompt (text) that explains to the LLM how to decode the emoji sequence back into the original command. This prompt includes the mapping.
+· The user copies the decoder prompt and the emoji sequence into the LLM chat (first the prompt, then the sequence). The LLM outputs the decrypted command.
+
+2. Functional Requirements (What the App Must Do)
+
+1. Input field: A text area where the user types a natural language command (e.g., “Изпрати имейл на Петър с резултатите”).
+2. “Generate” button: Triggers the encoding process.
+3. Output panel: Displays two clearly separated sections:
+   · LLM Decoder Prompt (to be copied and pasted into the LLM first)
+   · Encrypted Emoji Sequence (to be pasted right after the prompt)
+4. Encoding logic:
+   · Tokenize the input into words (split by spaces, lowercased, strip basic punctuation like .,!?;).
+   · Identify the set of unique words.
+   · For each unique word, assign a unique emoji randomly chosen from a predefined large pool of emojis (Unicode emojis). Use at least 300-500 emojis in the pool to avoid collisions and ensure randomness.
+   · If the number of unique words exceeds the pool size (unlikely for normal commands), fall back to encoding remaining words letter-by-letter using regional indicator symbols (e.g., 🇦 for 'a', 🇧 for 'b', ...).
+   · Build the encoded sequence: replace each word in the original command with its assigned emoji. Preserve the original word order. Words that have no emoji assigned (fallback) should be encoded letter-by-letter.
+   · For letter-by-letter encoding, use the rule: for each letter a-z, map to Unicode Regional Indicator Symbol (U+1F1E6 + offset). Non-letter characters can be represented by a placeholder like ▪️ (U+25AA) or simply kept as-is.
+5. Decoder prompt generation:
+   · Create a string that starts with a clear instruction to the LLM, for example:
+     “You are a decoder agent. I will give you a sequence of emojis. You must decode it using the following mapping:”
+   · Then list each assigned emoji and its corresponding word, one per line: emoji = word
+   · Add these rules:
+     · Each emoji corresponds exactly to one word.
+     · If you see sequences of regional indicator symbols (e.g., 🇭 🇪 🇱 🇱 🇴), combine them to form the word letter by letter.
+     · Ignore any other punctuation or placeholder symbols.
+     · Output ONLY the decoded plain text, no additional text.
+   · The final line of the prompt should be: Now, decode this emoji sequence: (followed by the emoji sequence that the user will paste manually).
+6. User workflow (displayed as instructions in the app):
+   · Step 1: Enter your command.
+   · Step 2: Click Generate.
+   · Step 3: Copy the LLM Decoder Prompt and paste it into the LLM chat.
+   · Step 4: Copy the Encrypted Emoji Sequence and paste it right after the prompt.
+   · Step 5: Send to the LLM.
+
+3. Technology Stack (Choose One, Prefer Simplicity)
+
+· Backend: Python 3.9+
+· Web framework: Flask (or FastAPI) with a minimal HTML/CSS frontend.
+· Or: A pure client-side JavaScript app (no server needed) that runs in the browser. I’m fine with either, but mention which one you pick.
+· If using Flask: use an app.py, templates/index.html, and a requirements.txt. Keep everything in a single folder.
+· If client-side only: provide an HTML file with inline CSS and JS.
+
+4. Detailed Behavior Specifications
+
+4.1 Emoji Pool
+
+Provide a list of diverse emojis (faces, animals, objects, symbols, etc.) in the code. The pool should contain at least 500 unique emojis to ensure enough entropy. Use actual Unicode emojis in a Python list (e.g., ["😀", "😂", ...]). You can generate the list programmatically but hardcoding a long list is acceptable for an MVP.
+
+4.2 Random Mapping
+
+· Use random.sample (or secrets.choice for cryptographic randomness; but random is fine for this non‑security critical application).
+· Guarantee that each distinct word gets a distinct emoji, and no two words share the same emoji.
+
+4.3 Fallback Letter-by-Letter
+
+· If the number of unique words exceeds the available emoji pool, fallback words should be encoded letter-by-letter.
+· For each letter in the word, output the corresponding Regional Indicator symbol. The mapping: chr(0x1F1E6 + (ord(letter) - ord('a'))).
+· For letters outside a-z, output ▪️ (or just keep the original symbol if safe).
+
+4.4 Decoder Prompt Format
+
+Example for the command “hello world” with mapping hello→😀, world→🌍:
+
+```
+You are a decoder agent. I will provide you with a sequence of emojis. Decode them using the mapping below:
+
+😀 = hello
+🌍 = world
+
+Rules:
+- Each emoji corresponds to exactly one word.
+- If you see letter indicator symbols (e.g., 🇦, 🇧), concatenate them to form the word.
+- Ignore punctuation and placeholder symbols.
+- Output ONLY the decoded message.
+
+Now, decode this emoji sequence:
+😀 🌍
+```
+
+4.5 Edge Cases
+
+· Empty input: show a message "Please enter a command."
+· Single word: works fine (one emoji).
+· Punctuation: strip leading/trailing punctuation from each token before mapping, but keep the original token in the sequence? No, use the cleaned token for mapping, and do not include punctuation in the emoji sequence. The LLM will output the words only (no punctuation). That is acceptable; the original meaning is preserved.
+· Repeated words: use the same emoji (the mapping is per unique word).
+· Very long inputs: the UI should handle it (textarea with vertical scroll).
+
+5. User Interface
+
+· Title: “Emoji Encrypt for LLM”
+· Clean, modern, dark theme (optional but nice).
+· Input: textarea with placeholder text.
+· Generate button.
+· Two output boxes with labels and “Copy” buttons next to each (JavaScript copy to clipboard).
+· Short usage instructions on the page.
+
+6. Deliverables
+
+· Complete source code with all necessary files.
+· Instructions on how to install dependencies and run the app locally (e.g., pip install -r requirements.txt && python app.py).
+· The code should be well-commented for future modification.
+
+7. Additional Options (Optional Enhancements)
+
+· Option to save/load a mapping as a JSON file (so the user can reuse a codebook).
+· Option to generate image sequences instead of emojis (e.g., colored circles or icons). If feasible, implement by generating small SVG data URIs inline, but emoji-only is the primary MVP.
+· Multilingual tokenization: simple split is fine for now.
+
+8. Example Session
+
+```
+User input: "изпрати имейл на Петър"
+Generated mapping:
+  изпрати → 🚀
+  имейл → ✉️
+  на → 🔛
+  Петър → 🧔 (or letter-by-letter if not in mapping pool)
+
+Emoji sequence: 🚀 ✉️ 🔛 🧔
+Decoder prompt: (includes mapping and instructions)
+LLM output: "изпрати имейл на Петър"
+```
+
+---
+
+Now, please build this application from scratch according to the specifications above. Provide the complete code and instructions.
